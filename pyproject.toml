@@ -1,0 +1,30 @@
+[project]
+name = "luo"
+version = "0.2.0"
+description = "文本优先的本地 AI 伙伴"
+readme = "README.md"
+authors = [
+    { name = "b-ing-l-ing", email = "bl3466766306@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=3.39.0",
+    "pydantic-settings>=2.16.1",
+    "rich>=15.0.0",
+]
+
+[project.scripts]
+luo = "luo:main"
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[build-system]
+requires = ["uv_build>=0.10.7,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
