@@ -43,6 +43,10 @@ uv run luo
 - 自动完成识别依赖模型判断，可能漏；`/done` 是兜底
 - 单进程、单会话（`local`）
 
+## 架构
+
+见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。核心约束：**LLM 不在实时回路里**；反射 / 战术 / 社交三层各有延迟预算。接口骨架在 `src/luo/core/interfaces.py`。
+
 ## 下一步
 
 - Minecraft：Node 边车 + Mineflayer，Python 通过本地 WebSocket 调 `follow / goto / mine / place / craft / give` 等技能
