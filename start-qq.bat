@@ -24,12 +24,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [1/2] 启动 NapCat...
-echo 如果启动失败，先运行 napcat.kill.qq.bat 清理残留。
-start "NapCat" /D "%NAPCAT_DIR%" "%NAPCAT_DIR%\napcat.quick.bat"
+set "NAPCAT_RUNNING="
+for /f "delims=" %%a in ('netstat -ano ^| findstr /R /C:":3001 .*LISTENING"') do set "NAPCAT_RUNNING=1"
 
-echo [2/2] 等待 5 秒后启动洛...
-timeout /t 5 /nobreak >nul
+if defined NAPCAT_RUNNING (
+    echo [1/2] NapCat 已在运行，跳过启动。
+) else (
+    echo [1/2] 启动 NapCat...
+    echo 如果启动失败，先运行 napcat.kill.qq.bat 清理残留。
+    start "NapCat" /D "%NAPCAT_DIR%" "%NAPCAT_DIR%\napcat.quick.bat"
+    echo [2/2] 等待 5 秒后启动洛...
+    timeout /t 5 /nobreak >nul
+)
 
 cd /d "%PROJECT_DIR%"
 uv run luo-qq

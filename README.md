@@ -16,7 +16,8 @@ uv run luo
 双击 `start-qq.bat`：它会先启动 NapCat，再启动 `luo-qq`。
 
 - 脚本顶部的 `NAPCAT_DIR` / `PROJECT_DIR` 是写死的，换路径改那两行
-- `napcat.quick.bat` 里已经填好小号 QQ；如果快速登录失效，改用 `napcat.bat` 手动登录一次
+- NapCat 已在运行（3001 端口监听）时，脚本会跳过启动；第一次扫码后保持 NapCat 窗口开着，之后不会再弹二维码
+- `napcat.quick.bat` 里已经填好小号 QQ，但 quick 登录不一定每次都生效；不行就用 `napcat.bat` 手动扫码
 - 停止：在 `luo-qq` 窗口 `Ctrl+C`，再关 NapCat 窗口
 - 不要同时开 `uv run luo` 和 `uv run luo-qq`（共用 `local` session）
 
