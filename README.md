@@ -16,7 +16,7 @@ uv run luo
 | 命令 | 作用 |
 | --- | --- |
 | `/quit` `/exit` | 退出（退出时做一次记忆整理） |
-| `/reset` | 清空本会话的事件和记忆 |
+| `/reset` | 清空本会话的事件、记忆和摘要 |
 | `/memory` | 查看已抽取的记忆 |
 | `/done <id>` | 把一条未完成的记忆标记为完成 |
 | `/forget <id>` | 删除指定记忆 |
@@ -24,6 +24,23 @@ uv run luo
 | `/promise <内容>` | 手动记一条没做完的事 |
 | `/summary` | 查看最近的会话摘要 |
 | `/help` | 显示帮助 |
+
+## 典型用法
+
+```text
+uv run luo
+/help
+我叫小林，明天一起打末影龙吧
+/quit
+
+# 再启动一次
+uv run luo
+上次我们聊了什么？
+/memory
+/summary
+```
+
+退出时会抽取记忆和会话摘要，下次启动自动带上。
 
 ## 当前能力
 
@@ -70,7 +87,9 @@ src/luo/
   store.py             # SQLite：events + memories + sessions
   memory.py            # 抽取、打分、注入
   channels/terminal.py # 终端 REPL
+  core/interfaces.py   # 游戏无关接口（GameAdapter / Planner / ...）
   persona/system.md    # 人设
+docs/ARCHITECTURE.md   # 三层循环与延迟预算
 tests/
 data/luo.db            # 运行时生成，已 gitignore
 ```
