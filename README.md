@@ -11,6 +11,15 @@ cp .env.example .env          # Windows CMD: copy .env.example .env
 uv run luo
 ```
 
+## 一键启动（QQ）
+
+双击 `start-qq.bat`：它会先启动 NapCat，再启动 `luo-qq`。
+
+- 脚本顶部的 `NAPCAT_DIR` / `PROJECT_DIR` 是写死的，换路径改那两行
+- `napcat.quick.bat` 里已经填好小号 QQ；如果快速登录失效，改用 `napcat.bat` 手动登录一次
+- 停止：在 `luo-qq` 窗口 `Ctrl+C`，再关 NapCat 窗口
+- 不要同时开 `uv run luo` 和 `uv run luo-qq`（共用 `local` session）
+
 ## 配置
 
 `.env` 里可调：
@@ -148,6 +157,7 @@ src/luo/
   core/interfaces.py   # 游戏无关接口（GameAdapter / Planner / ...）
   persona/system.md    # 人设
 docs/ARCHITECTURE.md   # 三层循环与延迟预算
+start-qq.bat           # Windows 一键启动 QQ 模式
 tests/
 data/luo.db            # 运行时生成，已 gitignore
 ```
