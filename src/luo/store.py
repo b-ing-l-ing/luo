@@ -162,6 +162,15 @@ class Store:
             out.append(item)
         return out
 
+    def open_memories(self, session_id: str, limit: int = 10) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT id, ts, kind, content, importance, status "
+            "FROM memories WHERE session_id = ? AND status = 'open' "
+            "ORDER BY id DESC LIMIT ?",
+            (session_id, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def memory_content_exists(self, session_id: str, content: str) -> bool:
         row = self._conn.execute(
             "SELECT 1 FROM memories WHERE session_id = ? AND content = ? LIMIT 1",

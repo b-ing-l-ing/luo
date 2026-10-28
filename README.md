@@ -1,6 +1,6 @@
 # luo
 
-文本优先的 AI 伙伴，v0.2。
+文本优先的 AI 伙伴，v0.3。
 
 ## 快速开始
 
@@ -10,6 +10,19 @@ cp .env.example .env          # Windows CMD: copy .env.example .env
 # 在 .env 里填 DEEPSEEK_API_KEY
 uv run luo
 ```
+
+## 配置
+
+`.env` 里可调：
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `DEEPSEEK_API_KEY` | — | 必填 |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/v1` | OpenAI 兼容端点 |
+| `DEEPSEEK_MODEL` | `deepseek-flash` | 模型 ID |
+| `HISTORY_LIMIT` | `20` | 启动时载入的消息条数 |
+| `STARTUP_GREETING` | `true` | 有摘要/未完成的事时，启动先开口 |
+| `STYLE_DEBUG` | `false` | 在终端标出命中的 AI 味说法 |
 
 ## 命令
 
@@ -45,6 +58,8 @@ uv run luo
 ## 当前能力
 
 - 终端对话，流式输出
+- 人设内置反 AI 味约束；`STYLE_DEBUG=true` 可在终端看命中项
+- 启动时如果有未完成的事或上次摘要，会先开口
 - 原始消息持久化，启动时载入最近 20 条
 - 每 6 轮或退出时抽取结构化记忆（kind / content / importance / status / source_event_ids）
 - 承诺、约定以 `open` 保存，每轮优先注入；能从对话里识别完成，也可以 `/done <id>` 手动标记
@@ -58,6 +73,7 @@ uv run luo
 - 记忆检索是关键词 + 打分，不是向量检索
 - 记忆抽取依赖模型输出 JSON；失败时会跳过这一轮
 - 自动完成识别依赖模型判断，可能漏；`/done` 是兜底
+- 反 AI 味目前是“人设约束 + 正则体检”，不是强制改写；模型仍可能偶尔说漏
 - 单进程、单会话（`local`）
 
 ## 架构
@@ -66,11 +82,11 @@ uv run luo
 
 ## 下一步
 
+- 聊天体验继续调：主动性、说话方式、回复节奏
+- async 核心 + `ChatChannel`，然后接 QQ（OneBot，小号 + 白名单）
 - Minecraft：Node 边车 + Mineflayer，Python 通过本地 WebSocket 调 `follow / goto / mine / place / craft / give` 等技能
 - 记忆按 `user` 聚合，聊天、游戏、QQ 共享同一份记忆
 - 检索升级：FTS5 / 向量，替换现在的关键词打分
-- 主动性调度器：什么时候开口、什么时候主动提起未完成的事
-- QQ 适配器（隔离封号风险）
 
 ## 测试
 
@@ -86,6 +102,8 @@ src/luo/
   llm.py               # DeepSeek / OpenAI 兼容客户端
   store.py             # SQLite：events + memories + sessions
   memory.py            # 抽取、打分、注入
+  greeting.py          # 启动主动开口
+  style.py             # AI 味体检
   channels/terminal.py # 终端 REPL
   core/interfaces.py   # 游戏无关接口（GameAdapter / Planner / ...）
   persona/system.md    # 人设

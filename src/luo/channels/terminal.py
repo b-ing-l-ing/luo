@@ -9,9 +9,11 @@ from rich.markup import escape
 from rich.prompt import Prompt
 
 from ..config import Settings
+from ..greeting import greet
 from ..llm import ChatLLM, Message
 from ..memory import MemoryManager, summarize_session
 from ..store import Store
+from ..style import find_violations
 
 SESSION_ID = "local"
 
@@ -88,12 +90,36 @@ def run(settings: Settings) -> None:
     session_start_event_id = store.last_event_id(SESSION_ID)
     history = store.recent_events(SESSION_ID, settings.history_limit)
     memory = MemoryManager(store, llm, settings, SESSION_ID)
+    open_loops = [
+        str(item["content"]) for item in store.open_memories(SESSION_ID, limit=5)
+    ]
 
-    console.print("[bold]洛 v0.2[/]  /help 查看命令")
+    console.print("[bold]洛 v0.3[/]  /help 查看命令")
     if history:
         console.print(f"[dim]已载入最近 {len(history)} 条消息[/]")
     if last_summaries:
         console.print("[dim]已载入上次会话摘要[/]")
+
+    if settings.startup_greeting and (last_summaries or open_loops):
+        console.print("[bold green]洛[/] ", end="")
+        try:
+            greeting = greet(
+                llm,
+                store,
+                persona,
+                open_loops,
+                emit=lambda text: console.print(text, end="", markup=False, highlight=False),
+                session_id=SESSION_ID,
+            )
+            if greeting:
+                history.append({"role": "assistant", "content": greeting})
+                if settings.style_debug:
+                    hits = find_violations(greeting)
+                    if hits:
+                        console.print(f"\n[dim]AI味：{'、'.join(hits)}[/]")
+        except Exception as exc:  # noqa: BLE001
+            console.print(f"\n[dim]主动开口失败：{exc}[/]")
+        console.print()
 
     try:
         while True:
@@ -177,7 +203,7 @@ def run(settings: Settings) -> None:
 
             console.print("[bold green]洛[/] ", end="")
             try:
-                respond(
+                reply = respond(
                     llm,
                     store,
                     persona,
@@ -187,6 +213,10 @@ def run(settings: Settings) -> None:
                     emit=lambda text: console.print(text, end="", markup=False, highlight=False),
                     history_limit=settings.history_limit,
                 )
+                if settings.style_debug:
+                    hits = find_violations(reply)
+                    if hits:
+                        console.print(f"\n[dim]AI味：{'、'.join(hits)}[/]")
             except Exception as exc:  # noqa: BLE001 - 终端里给出可读错误即可
                 console.print(f"\n[red]模型调用失败：{exc}[/]")
                 continue

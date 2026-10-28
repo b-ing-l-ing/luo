@@ -111,6 +111,16 @@ def test_migrates_old_schema(tmp_path):
     store.close()
 
 
+def test_open_memories(tmp_path):
+    store = Store(tmp_path / "t.db")
+    store.add_memory("local", "promise", "明天打末影龙", 3, status="open")
+    store.add_memory("local", "fact", "用户叫小林", 3, status="closed")
+    rows = store.open_memories("local")
+    assert len(rows) == 1
+    assert rows[0]["content"] == "明天打末影龙"
+    store.close()
+
+
 def test_memory_content_exists(tmp_path):
     store = Store(tmp_path / "t.db")
     store.add_memory("local", "fact", "同样的内容", 3)

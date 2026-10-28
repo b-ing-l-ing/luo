@@ -30,3 +30,5 @@ class Settings(BaseSettings):
     history_limit: int = Field(default=20, ge=1)
     memory_top_k: int = Field(default=8, ge=0, le=50)
     memory_extract_every: int = Field(default=6, ge=1)
+    startup_greeting: bool = True
+    style_debug: bool = False
