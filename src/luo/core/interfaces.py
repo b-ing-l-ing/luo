@@ -82,6 +82,16 @@ class Decision:
 
 
 @dataclass(frozen=True)
+class ChannelMessage:
+    """通道收到的消息。user_id 是通道内的用户标识，用于拆 session。"""
+
+    channel: str
+    user_id: str
+    text: str
+    display_name: str | None = None
+
+
+@dataclass(frozen=True)
 class PlannerContext:
     """给规划器的上下文。memory 已经是压缩后的文本块。"""
 
@@ -135,13 +145,23 @@ class Speaker(Protocol):
 
 
 class ChatChannel(Protocol):
-    """终端 / QQ 等聊天通道。"""
+    """终端 / QQ 等聊天通道。to 是通道内的用户标识。"""
+
+    name: str
+
+    async def open(self) -> None: ...
 
     async def start(
-        self, on_message: Callable[[str], Awaitable[None]]
+        self, on_message: Callable[[ChannelMessage], Awaitable[None]]
     ) -> None: ...
 
-    async def send(self, text: str) -> None: ...
+    async def send(self, to: str, text: str) -> None: ...
+
+    async def start_message(self, to: str) -> None: ...
+
+    async def send_delta(self, to: str, text: str) -> None: ...
+
+    async def end_message(self, to: str) -> None: ...
 
     async def stop(self) -> None: ...
 

@@ -32,3 +32,19 @@ class Settings(BaseSettings):
     memory_extract_every: int = Field(default=6, ge=1)
     startup_greeting: bool = True
     style_debug: bool = False
+
+    # 跨通道身份映射：raw_key=canonical_key，逗号分隔。
+    # 例：qq:3466766306=local 让 QQ 主号和终端共用 "local" 这一份记忆。
+    session_aliases: str = ""
+
+    # 主动消息：QQ 会话空闲且还有未完成的事时，主动发一句。
+    proactive_enabled: bool = True
+    proactive_idle_minutes: int = Field(default=120, ge=0)
+    proactive_cooldown_minutes: int = Field(default=720, ge=0)
+    proactive_check_seconds: int = Field(default=60, ge=5)
+
+    # QQ（NapCat / OneBot 11，私聊）
+    qq_ws_url: str = "ws://127.0.0.1:3001"
+    qq_access_token: str = ""
+    qq_allowed_users: str = ""
+    qq_self_id: str = ""

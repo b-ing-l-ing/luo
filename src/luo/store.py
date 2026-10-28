@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import functools
 import json
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -46,15 +48,28 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _locked(method):
+    """同一连接会被事件循环和工作线程共用，用 RLock 串行化。"""
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
+
 class Store:
     def __init__(self, db_path: Path) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(db_path)
+        self._lock = threading.RLock()
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(SCHEMA)
         self._migrate()
         self._conn.commit()
 
+    @_locked
     def _migrate(self) -> None:
         columns = {
             row["name"]
@@ -67,6 +82,7 @@ class Store:
         if "resolved_at" not in columns:
             self._conn.execute("ALTER TABLE memories ADD COLUMN resolved_at TEXT")
 
+    @_locked
     def add_event(self, session_id: str, role: str, content: str) -> int:
         cur = self._conn.execute(
             "INSERT INTO events (ts, session_id, role, content) VALUES (?, ?, ?, ?)",
@@ -75,6 +91,7 @@ class Store:
         self._conn.commit()
         return int(cur.lastrowid)
 
+    @_locked
     def recent_events(self, session_id: str, limit: int) -> list[dict[str, str]]:
         rows = self._conn.execute(
             "SELECT role, content FROM events WHERE session_id = ? ORDER BY id DESC LIMIT ?",
@@ -82,6 +99,7 @@ class Store:
         ).fetchall()
         return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
 
+    @_locked
     def events_after(
         self, session_id: str, after_id: int, limit: int = 40
     ) -> list[dict[str, Any]]:
@@ -92,6 +110,7 @@ class Store:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    @_locked
     def last_event_id(self, session_id: str) -> int:
         row = self._conn.execute(
             "SELECT COALESCE(MAX(id), 0) AS max_id FROM events WHERE session_id = ?",
@@ -99,6 +118,7 @@ class Store:
         ).fetchone()
         return int(row["max_id"])
 
+    @_locked
     def add_session_summary(
         self, session_id: str, started_at: str, event_count: int, summary: str
     ) -> int:
@@ -110,6 +130,7 @@ class Store:
         self._conn.commit()
         return int(cur.lastrowid)
 
+    @_locked
     def recent_session_summaries(
         self, session_id: str, limit: int = 3
     ) -> list[dict[str, Any]]:
@@ -120,6 +141,7 @@ class Store:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    @_locked
     def add_memory(
         self,
         session_id: str,
@@ -148,6 +170,7 @@ class Store:
         self._conn.commit()
         return int(cur.lastrowid)
 
+    @_locked
     def all_memories(self, session_id: str, limit: int = 500) -> list[dict[str, Any]]:
         rows = self._conn.execute(
             "SELECT id, ts, kind, content, importance, source_event_ids, "
@@ -162,6 +185,7 @@ class Store:
             out.append(item)
         return out
 
+    @_locked
     def open_memories(self, session_id: str, limit: int = 10) -> list[dict[str, Any]]:
         rows = self._conn.execute(
             "SELECT id, ts, kind, content, importance, status "
@@ -171,6 +195,7 @@ class Store:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    @_locked
     def memory_content_exists(self, session_id: str, content: str) -> bool:
         row = self._conn.execute(
             "SELECT 1 FROM memories WHERE session_id = ? AND content = ? LIMIT 1",
@@ -178,6 +203,7 @@ class Store:
         ).fetchone()
         return row is not None
 
+    @_locked
     def touch_memories(self, ids: list[int]) -> None:
         if not ids:
             return
@@ -188,6 +214,7 @@ class Store:
         )
         self._conn.commit()
 
+    @_locked
     def set_memory_status(self, memory_id: int, status: str) -> bool:
         if status not in {"open", "closed"}:
             return False
@@ -199,16 +226,19 @@ class Store:
         self._conn.commit()
         return cur.rowcount > 0
 
+    @_locked
     def delete_memory(self, memory_id: int) -> bool:
         cur = self._conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
         self._conn.commit()
         return cur.rowcount > 0
 
+    @_locked
     def reset_session(self, session_id: str) -> None:
         self._conn.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
         self._conn.execute("DELETE FROM memories WHERE session_id = ?", (session_id,))
         self._conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
         self._conn.commit()
 
+    @_locked
     def close(self) -> None:
         self._conn.close()

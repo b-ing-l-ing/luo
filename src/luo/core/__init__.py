@@ -1,5 +1,6 @@
 from .interfaces import (
     Action,
+    ChannelMessage,
     ChatChannel,
     Decision,
     GameAdapter,
@@ -17,6 +18,7 @@ from .interfaces import (
 
 __all__ = [
     "Action",
+    "ChannelMessage",
     "ChatChannel",
     "Decision",
     "GameAdapter",

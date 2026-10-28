@@ -1,6 +1,6 @@
 [project]
 name = "luo"
-version = "0.3.0"
+version = "0.6.0"
 description = "文本优先的本地 AI 伙伴"
 readme = "README.md"
 authors = [
@@ -11,10 +11,12 @@ dependencies = [
     "openai>=3.39.0",
     "pydantic-settings>=2.16.1",
     "rich>=15.0.0",
+    "websockets>=17.3",
 ]
 
 [project.scripts]
 luo = "luo:main"
+luo-qq = "luo:main_qq"
 
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"

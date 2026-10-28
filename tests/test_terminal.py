@@ -1,4 +1,4 @@
-from luo.channels.terminal import build_messages, respond
+from luo.chat import build_messages, respond
 from luo.store import Store
 
 

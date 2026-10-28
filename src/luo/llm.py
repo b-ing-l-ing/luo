@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
-from openai import BadRequestError, OpenAI
+from openai import AsyncOpenAI, BadRequestError, OpenAI
 
 from .config import Settings
 
@@ -48,6 +48,51 @@ class ChatLLM:
             if not json_mode:
                 raise
             resp = self._client.chat.completions.create(
+                model=self._model,
+                messages=messages,  # type: ignore[arg-type]
+            )
+        return resp.choices[0].message.content or ""
+
+
+class AsyncChatLLM:
+    """异步版本，供事件循环内的聊天使用。记忆抽取/摘要继续用同步客户端。"""
+
+    def __init__(self, settings: Settings) -> None:
+        if not settings.deepseek_api_key:
+            raise RuntimeError("DEEPSEEK_API_KEY 未设置，请在 .env 里填写")
+        self._client = AsyncOpenAI(
+            api_key=settings.deepseek_api_key,
+            base_url=settings.deepseek_base_url,
+        )
+        self._model = settings.deepseek_model
+
+    async def stream(self, messages: list[Message]) -> AsyncIterator[str]:
+        stream = await self._client.chat.completions.create(
+            model=self._model,
+            messages=messages,  # type: ignore[arg-type]
+            stream=True,
+        )
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
+
+    async def complete(self, messages: list[Message], *, json_mode: bool = False) -> str:
+        kwargs: dict[str, Any] = {}
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        try:
+            resp = await self._client.chat.completions.create(
+                model=self._model,
+                messages=messages,  # type: ignore[arg-type]
+                **kwargs,
+            )
+        except BadRequestError:
+            if not json_mode:
+                raise
+            resp = await self._client.chat.completions.create(
                 model=self._model,
                 messages=messages,  # type: ignore[arg-type]
             )

@@ -1,6 +1,6 @@
 # luo
 
-文本优先的 AI 伙伴，v0.3。
+文本优先的 AI 伙伴，v0.6。
 
 ## 快速开始
 
@@ -23,6 +23,36 @@ uv run luo
 | `HISTORY_LIMIT` | `20` | 启动时载入的消息条数 |
 | `STARTUP_GREETING` | `true` | 有摘要/未完成的事时，启动先开口 |
 | `STYLE_DEBUG` | `false` | 在终端标出命中的 AI 味说法 |
+| `QQ_WS_URL` | `ws://127.0.0.1:3001` | NapCat OneBot 11 WebSocket 地址 |
+| `QQ_ACCESS_TOKEN` | — | NapCat 的 access token |
+| `QQ_ALLOWED_USERS` | — | 允许私聊的 QQ 号，逗号分隔；留空拒绝启动 |
+| `QQ_SELF_ID` | — | 小号自己的 QQ 号，可选 |
+| `SESSION_ALIASES` | — | 跨通道身份映射，例 `qq:123456=local` |
+| `PROACTIVE_ENABLED` | `true` | QQ 空闲且有待办时，是否主动发一句 |
+| `PROACTIVE_IDLE_MINUTES` | `120` | 空闲多久后考虑主动消息 |
+| `PROACTIVE_COOLDOWN_MINUTES` | `720` | 两次主动消息的最小间隔 |
+| `PROACTIVE_CHECK_SECONDS` | `60` | 检查间隔 |
+
+## QQ（NapCat，私聊）
+
+先安装 NapCat，用**小号**登录，在 WebUI 开启 WebSocket Server（`127.0.0.1:3001`，消息格式选 `array`，设置 token）。
+
+`.env`：
+
+```text
+QQ_WS_URL=ws://127.0.0.1:3001
+QQ_ACCESS_TOKEN=你的token
+QQ_ALLOWED_USERS=你的主号QQ
+QQ_SELF_ID=小号QQ
+```
+
+运行：
+
+```bash
+uv run luo-qq
+```
+
+只处理私聊；只回复白名单；群消息忽略。第三方协议违反 QQ 用户协议，有封号风险，**只用小号**。
 
 ## 命令
 
@@ -58,6 +88,10 @@ uv run luo
 ## 当前能力
 
 - 终端对话，流式输出
+- async 运行时 + `ChatChannel`；终端和 QQ 私聊都是通道
+- QQ 私聊（OneBot 11 / NapCat），按 QQ 号拆 session
+- 跨通道身份映射：`SESSION_ALIASES` 可让 QQ 主号和终端共用同一份 history / 记忆 / open loop
+- 主动跟进：QQ 会话空闲且还有未完成的事时，会主动发一句（可关）
 - 人设内置反 AI 味约束；`STYLE_DEBUG=true` 可在终端看命中项
 - 启动时如果有未完成的事或上次摘要，会先开口
 - 原始消息持久化，启动时载入最近 20 条
@@ -69,12 +103,14 @@ uv run luo
 
 ## 已知限制
 
-- 只有终端通道，没有 QQ / 游戏接入
+- QQ 只支持私聊文本；图片/语音只以占位符进入上下文，群聊未实现
+- QQ 依赖 NapCat；第三方协议有封号风险，只用小号、白名单、低频
 - 记忆检索是关键词 + 打分，不是向量检索
 - 记忆抽取依赖模型输出 JSON；失败时会跳过这一轮
 - 自动完成识别依赖模型判断，可能漏；`/done` 是兜底
 - 反 AI 味目前是“人设约束 + 正则体检”，不是强制改写；模型仍可能偶尔说漏
-- 单进程、单会话（`local`）
+- 单进程；同一用户的消息串行处理，还没有多会话并发调度
+- 主动消息只在 QQ；冷却计时是进程内的，重启会重置
 
 ## 架构
 
@@ -82,10 +118,10 @@ uv run luo
 
 ## 下一步
 
-- 聊天体验继续调：主动性、说话方式、回复节奏
-- async 核心 + `ChatChannel`，然后接 QQ（OneBot，小号 + 白名单）
+- 事件总线 / 多用户并发（主动性调度已做）
+- QQ 稳定性：NapCat 掉线重连、限流、消息分条
 - Minecraft：Node 边车 + Mineflayer，Python 通过本地 WebSocket 调 `follow / goto / mine / place / craft / give` 等技能
-- 记忆按 `user` 聚合，聊天、游戏、QQ 共享同一份记忆
+- 游戏事件复用 QQ 的按用户 session，聊天和游戏共享同一份记忆
 - 检索升级：FTS5 / 向量，替换现在的关键词打分
 
 ## 测试
@@ -99,12 +135,16 @@ uv run pytest
 ```
 src/luo/
   config.py            # 配置（.env）
-  llm.py               # DeepSeek / OpenAI 兼容客户端
+  llm.py               # DeepSeek 同步 / 异步客户端
   store.py             # SQLite：events + memories + sessions
   memory.py            # 抽取、打分、注入
+  chat.py              # 消息组装与同步回合
+  runtime.py           # async 运行时、命令、关闭流程
   greeting.py          # 启动主动开口
   style.py             # AI 味体检
-  channels/terminal.py # 终端 REPL
+  channels/base.py     # ChatChannel 基类
+  channels/terminal.py # 终端通道
+  channels/qq.py       # OneBot 11 私聊通道（NapCat）
   core/interfaces.py   # 游戏无关接口（GameAdapter / Planner / ...）
   persona/system.md    # 人设
 docs/ARCHITECTURE.md   # 三层循环与延迟预算
