@@ -89,6 +89,7 @@ class ChannelMessage:
     user_id: str
     text: str
     display_name: str | None = None
+    images: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -156,6 +157,8 @@ class ChatChannel(Protocol):
     ) -> None: ...
 
     async def send(self, to: str, text: str) -> None: ...
+
+    async def send_image(self, to: str, data: bytes, mime: str) -> None: ...
 
     async def start_message(self, to: str) -> None: ...
 

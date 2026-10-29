@@ -254,12 +254,12 @@ class MemoryManager:
         self._turns = 0
         self.last_resolved: list[int] = []
 
-    def render_for(self, user_text: str) -> str:
+    def retrieve(self, user_text: str) -> list[dict[str, Any]]:
         if self.settings.memory_top_k <= 0:
-            return ""
+            return []
         memories = self.store.all_memories(self.session_id)
         if not memories:
-            return ""
+            return []
         terms = query_terms(user_text)
         ranked = sorted(
             memories, key=lambda memory: score_memory(memory, terms), reverse=True
@@ -276,10 +276,12 @@ class MemoryManager:
             picked.append(memory)
             if len(picked) >= self.settings.memory_top_k:
                 break
-        if not picked:
-            return ""
-        self.store.touch_memories([int(memory["id"]) for memory in picked])
-        return render_memory_block(picked)
+        if picked:
+            self.store.touch_memories([int(memory["id"]) for memory in picked])
+        return picked
+
+    def render_for(self, user_text: str) -> str:
+        return render_memory_block(self.retrieve(user_text))
 
     def on_turn(self) -> None:
         self.last_resolved = []

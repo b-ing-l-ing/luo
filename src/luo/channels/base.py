@@ -27,6 +27,9 @@ class BaseChannel:
     async def send(self, to: str, text: str) -> None:
         raise NotImplementedError
 
+    async def send_image(self, to: str, data: bytes, mime: str) -> None:
+        raise NotImplementedError
+
     async def start_message(self, to: str) -> None:
         self._buffers[to] = []
 

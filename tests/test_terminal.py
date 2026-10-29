@@ -50,6 +50,18 @@ def test_respond_respects_history_limit(tmp_path):
     store.close()
 
 
+def test_build_messages_with_images():
+    messages = build_messages(
+        "persona", "", [], "看", images=("data:image/png;base64,abc",)
+    )
+    content = messages[-1]["content"]
+    assert content[0] == {"type": "text", "text": "看"}
+    assert content[1] == {
+        "type": "image_url",
+        "image_url": {"url": "data:image/png;base64,abc"},
+    }
+
+
 def test_build_messages_with_memory():
     history = [{"role": "user", "content": "a"}]
     messages = build_messages("persona", "memory", history, "b")

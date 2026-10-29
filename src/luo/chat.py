@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from .llm import Message
 from .memory import MemoryManager
@@ -22,15 +22,29 @@ def load_persona(path: Path) -> str:
 
 
 def build_messages(
-    persona: str, memory_block: str, history: list[Message], user_text: str
+    persona: str,
+    memory_block: str,
+    history: list[Message],
+    user_text: str,
+    images: tuple[str, ...] = (),
 ) -> list[Message]:
     system = persona
     if memory_block:
         system = f"{system}\n\n{memory_block}"
+    if images:
+        user_content: Any = [
+            {"type": "text", "text": user_text or "（图片）"},
+            *[
+                {"type": "image_url", "image_url": {"url": url}}
+                for url in images
+            ],
+        ]
+    else:
+        user_content = user_text
     return [
         {"role": "system", "content": system},
         *history,
-        {"role": "user", "content": user_text},
+        {"role": "user", "content": user_content},
     ]
 
 
@@ -45,10 +59,13 @@ def respond(
     emit: Callable[[str], None] = print,
     history_limit: int = 20,
     session_id: str = SESSION_ID,
+    images: tuple[str, ...] = (),
 ) -> str:
     store.add_event(session_id, "user", user_text)
     memory_block = memory.render_for(user_text) if memory else ""
-    messages = build_messages(persona, memory_block, history, user_text)
+    messages = build_messages(
+        persona, memory_block, history, user_text, images
+    )
 
     parts: list[str] = []
     for delta in llm.stream(messages):

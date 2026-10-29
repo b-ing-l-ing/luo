@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com/v1"
     deepseek_model: str = "deepseek-flash"
 
+    # 联网搜索（按需工具；DeepSeek 原生搜索，Bing RSS 兜底）
+    web_search_enabled: bool = True
+    web_search_provider: str = "auto"
+    web_search_base_url: str = "https://api.deepseek.com/anthropic/v1"
+    web_search_model: str = "deepseek-v4-flash"
+    web_search_max_results: int = Field(default=5, ge=1, le=10)
+    auto_save_web_memes: bool = True
+    web_meme_max_per_hour: int = Field(default=3, ge=0)
+
     persona_path: Path = PACKAGE_DIR / "persona" / "system.md"
     db_path: Path = PROJECT_ROOT / "data" / "luo.db"
 
@@ -48,3 +57,10 @@ class Settings(BaseSettings):
     qq_access_token: str = ""
     qq_allowed_users: str = ""
     qq_self_id: str = ""
+    qq_burst_max: int = Field(default=3, ge=1, le=5)
+    qq_burst_delay: float = Field(default=0.8, ge=0.0, le=5.0)
+
+    # 本地梗图库：文件名就是标签
+    memes_dir: Path = PROJECT_ROOT / "memes"
+    # QQ 收藏表情同步后的本地库
+    stickers_path: Path = PROJECT_ROOT / "state" / "stickers.json"

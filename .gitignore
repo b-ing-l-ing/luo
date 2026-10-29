@@ -51,3 +51,18 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Minecraft server / Node bot
+mc-server/*
+!mc-server/start-server.bat
+!mc-server/server.properties
+bot/node_modules/
+bot/*.out
+bot/*.log
+
+# Memes (local only)
+memes/*
+!memes/README.md
+
+# Runtime state (QQ sticker library etc.)
+state/

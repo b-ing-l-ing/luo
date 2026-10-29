@@ -7,9 +7,13 @@ from websockets.asyncio.server import serve
 from luo.channels.base import StopCompanion
 from luo.channels.qq import (
     QQChannel,
+    _host_is_public,
     build_send_payload,
+    extract_image_urls,
     extract_text,
+    fetch_image_data_url,
     parse_allowed,
+    split_burst,
     split_message,
 )
 from luo.config import Settings
@@ -72,6 +76,67 @@ def test_to_message_filters():
     assert channel._to_message({**base, "user_id": 999}) is None
     assert channel._to_message({**base, "message_type": "group"}) is None
     assert channel._to_message({**base, "post_type": "notice"}) is None
+
+
+def test_extract_image_urls():
+    event = {
+        "message": [
+            {"type": "text", "data": {"text": "看"}},
+            {"type": "image", "data": {"url": "https://example.com/a.png"}},
+        ]
+    }
+    assert extract_image_urls(event) == ["https://example.com/a.png"]
+
+
+def test_to_message_keeps_images():
+    settings = Settings(_env_file=None, qq_allowed_users="123")
+    channel = QQChannel(settings)
+    event = {
+        "post_type": "message",
+        "message_type": "private",
+        "user_id": 123,
+        "message": [
+            {"type": "image", "data": {"url": "https://example.com/a.png"}}
+        ],
+    }
+    msg = channel._to_message(event)
+    assert msg is not None
+    assert msg.images == ("https://example.com/a.png",)
+    assert msg.text == "[图片]"
+
+
+def test_image_fetch_rejects_private_hosts():
+    assert not _host_is_public("127.0.0.1")
+    assert not _host_is_public("localhost")
+    assert fetch_image_data_url("http://127.0.0.1/a.png") is None
+
+
+def test_split_burst():
+    assert split_burst("一句") == ["一句"]
+    assert split_burst("第一段\n\n第二段") == ["第一段", "第二段"]
+    parts = split_burst("1\n\n2\n\n3\n\n4", 3)
+    assert len(parts) == 3
+    assert parts[-1].startswith("3")
+
+
+def test_send_image_payload():
+    class FakeWS:
+        def __init__(self):
+            self.sent = []
+
+        async def send(self, raw):
+            self.sent.append(json.loads(raw))
+
+    channel = QQChannel(Settings(_env_file=None, qq_allowed_users="123"))
+    channel._ws = FakeWS()
+    channel._send_delay = 0
+
+    asyncio.run(channel.send_image("123", b"abc", "image/png"))
+
+    payload = channel._ws.sent[0]
+    assert payload["action"] == "send_private_msg"
+    assert payload["params"]["message"][0]["type"] == "image"
+    assert payload["params"]["message"][0]["data"]["file"].startswith("base64://")
 
 
 def test_qq_channel_ws_roundtrip():

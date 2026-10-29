@@ -31,6 +31,11 @@ class TerminalChannel(BaseChannel):
     async def send(self, to: str, text: str) -> None:
         self.console.print(text, markup=False, highlight=False)
 
+    async def send_image(self, to: str, data: bytes, mime: str) -> None:
+        self.console.print(
+            f"[图片 {mime}，{len(data)} 字节]", markup=False, highlight=False
+        )
+
     async def start_message(self, to: str) -> None:
         self.console.print("[bold green]洛[/] ", end="")
 
