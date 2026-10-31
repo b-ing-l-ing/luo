@@ -4,7 +4,12 @@ import base64
 from luo.channels.base import BaseChannel, StopCompanion
 from luo.config import Settings
 from luo.core.interfaces import ChannelMessage
-from luo.runtime import CompanionRuntime, map_session_key, parse_aliases
+from luo.runtime import (
+    CompanionRuntime,
+    Session,
+    map_session_key,
+    parse_aliases,
+)
 from luo.store import Store
 
 
@@ -374,3 +379,86 @@ def test_runtime_help_command(tmp_path):
     asyncio.run(runtime.run())
 
     assert any("/remember" in text for _, text in channel.sent)
+
+
+def test_mc_events_do_not_call_llm(tmp_path):
+    settings = Settings(_env_file=None, startup_greeting=False)
+    store = Store(tmp_path / "t.db")
+    channel = FakeChannel([])
+    llm = FakeAsyncLLM(["不该出现"])
+    runtime = CompanionRuntime(
+        settings,
+        channel,
+        store=store,
+        sync_llm=FakeSyncLLM(),
+        async_llm=llm,
+    )
+
+    asyncio.run(
+        runtime.on_message(
+            ChannelMessage(
+                "mc",
+                "local",
+                "（游戏事件）Tester 进入了服务器。",
+                kind="event",
+            )
+        )
+    )
+    asyncio.run(
+        runtime.on_message(
+            ChannelMessage(
+                "mc", "local", "挖到了 木头x3。", kind="action"
+            )
+        )
+    )
+
+    assert store.recent_events("local", 10) == [
+        {
+            "role": "system",
+            "content": "（游戏事件）Tester 进入了服务器。",
+        },
+        {"role": "system", "content": "（洛的动作）挖到了 木头x3。"},
+    ]
+    assert channel.sent == [("local", "挖到了 木头x3。")]
+    assert llm.calls == []
+    store.close()
+
+
+def test_history_char_budget(tmp_path):
+    settings = Settings(
+        _env_file=None,
+        startup_greeting=False,
+        history_limit=20,
+        history_char_limit=10,
+    )
+    store = Store(tmp_path / "t.db")
+    session = Session(
+        store, FakeSyncLLM(), settings, "fake", "u", "fake:u"
+    )
+
+    session.add_history("user", "1234567890")
+    session.add_history("assistant", "1234567890")
+    assert len(session.history) == 2
+
+    session.add_history("user", "abcdefghij")
+    assert len(session.history) == 2
+    assert session.history[-1]["content"] == "abcdefghij"
+    store.close()
+
+
+def test_clip_tool_result(tmp_path):
+    settings = Settings(
+        _env_file=None, startup_greeting=False, tool_result_chars=5
+    )
+    runtime = CompanionRuntime(
+        settings,
+        FakeChannel([]),
+        store=Store(tmp_path / "t.db"),
+        sync_llm=FakeSyncLLM(),
+        async_llm=FakeAsyncLLM([]),
+    )
+
+    out = runtime._clip_tool_result("0123456789")
+
+    assert out.startswith("01234")
+    assert "截断" in out

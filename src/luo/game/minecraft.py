@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -72,7 +73,111 @@ MC_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "mc_inventory",
+            "description": "查看洛背包里有什么。",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mc_collect",
+            "description": (
+                "在附近采集方块，例如木头、石头、沙子、泥土、煤矿。"
+                "后台执行，做完会通知；不要等它。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "block": {
+                        "type": "string",
+                        "description": "方块名，例如 木头、石头、沙子",
+                    },
+                    "count": {
+                        "type": "integer",
+                        "description": "数量，默认 4，最多 16",
+                    },
+                },
+                "required": ["block"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mc_give",
+            "description": (
+                "把背包里的东西丢给玩家，会先走过去。"
+                "后台执行，做完会通知。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "item": {
+                        "type": "string",
+                        "description": "物品名，例如 木头、煤、铁锭",
+                    },
+                    "count": {"type": "integer", "description": "数量，默认 1"},
+                    "player": {
+                        "type": "string",
+                        "description": "玩家名，可选，默认给刚才说话的人",
+                    },
+                },
+                "required": ["item"],
+            },
+        },
+    },
 ]
+
+
+def format_mc_event(
+    name: str, data: dict[str, Any]
+) -> tuple[str, str] | None:
+    """把边车事件转成 (kind, text)；不认识的返回 None。"""
+    username = str(data.get("username") or "").strip()
+    if name == "death":
+        position = data.get("position") or {}
+        where = ""
+        if position:
+            try:
+                where = (
+                    f"（在 {float(position['x']):.0f}, "
+                    f"{float(position['y']):.0f}, "
+                    f"{float(position['z']):.0f}）"
+                )
+            except (KeyError, TypeError, ValueError):
+                where = ""
+        return "event", f"（游戏事件）洛在游戏里死了{where}。"
+    if name == "player_death":
+        if not username:
+            return None
+        return "event", f"（游戏事件）{username} 在游戏里死了。"
+    if name == "spawn":
+        return "event", "（游戏事件）洛进入了服务器。"
+    if name == "player_joined":
+        if not username:
+            return None
+        return "event", f"（游戏事件）{username} 进入了服务器。"
+    if name == "player_left":
+        if not username:
+            return None
+        return "event", f"（游戏事件）{username} 离开了服务器。"
+    if name == "action_done":
+        summary = str(data.get("summary") or "").strip()
+        if not summary:
+            return None
+        return "action", summary
+    if name == "action_failed":
+        error = str(data.get("error") or "").strip() or "不知道为啥"
+        return "action", f"没干成：{error}。"
+    return None
 
 
 def split_say(text: str, limit: int = 180) -> list[str]:
@@ -100,6 +205,65 @@ def split_say(text: str, limit: int = 180) -> list[str]:
     return [chunk for chunk in chunks if chunk]
 
 
+COUNT_WORDS = {
+    "一": 1,
+    "两": 2,
+    "二": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+    "十": 10,
+}
+
+COLLECT_BLOCKS = (
+    "木头",
+    "原木",
+    "树",
+    "橡木",
+    "白桦",
+    "云杉",
+    "石头",
+    "圆石",
+    "泥土",
+    "沙子",
+    "煤矿",
+    "铁矿",
+    "铜矿",
+    "金矿",
+    "钻石",
+)
+
+GIVE_ITEMS = (
+    "木头",
+    "原木",
+    "石头",
+    "圆石",
+    "泥土",
+    "沙子",
+    "煤",
+    "铁锭",
+    "面包",
+    "苹果",
+    "镐子",
+    "斧子",
+    "剑",
+)
+
+
+def parse_count(message: str, default: int = 4) -> int:
+    match = re.search(r"(\d{1,2})", message)
+    if match:
+        return max(1, min(16, int(match.group(1))))
+    for word, value in COUNT_WORDS.items():
+        if f"{word}个" in message or f"{word}块" in message:
+            return value
+    return default
+
+
 def parse_mc_intent(
     text: str, player: str
 ) -> tuple[str, dict[str, Any]] | None:
@@ -107,18 +271,63 @@ def parse_mc_intent(
     message = message.strip()
     if not message:
         return None
+    # 去掉“洛，”“洛 ”之类称呼，只看指令本体。
+    stripped = re.sub(r"^洛[，,、:：\s]*", "", message)
     if (
-        any(word in message for word in ("别跟着", "别动", "停下", "停止"))
+        any(
+            word in message
+            for word in (
+                "别跟着",
+                "别动",
+                "停下",
+                "停止",
+                "别挖",
+                "别采",
+            )
+        )
         or message in {"停", "stop"}
     ):
         return "mc_stop", {}
-    if any(word in message for word in ("跟着我", "跟我", "过来", "跟上")):
+    # “跟我讲个故事”不是指令，“跟我来/过来”才是。
+    if "跟着我" in message or re.match(
+        r"^(快|来|你)?\s*(跟我来|跟我走|跟我这边|跟我$|过来|跟上)",
+        stripped,
+    ):
         return "mc_follow", {"player": player}
     if any(
         word in message
-        for word in ("你在哪", "你在哪里", "什么状态", "状态", "坐标")
+        for word in ("你在哪", "你在哪里", "什么状态", "坐标")
     ):
         return "mc_state", {}
+    if any(
+        word in message
+        for word in ("背包", "带了什么", "有什么东西")
+    ):
+        return "mc_inventory", {}
+    # 必须是命令式的“挖/砍/采”，不能把“今天挖了木头”这种闲聊当指令。
+    collect_cmd = re.match(
+        r"^(快|去|帮我|帮忙|给我|来)?\s*(挖|砍|采)(?!了)",
+        stripped,
+    ) or re.search(r"(帮我|帮忙|去|快)\s*(挖|砍|采)(?!了)", stripped)
+    if collect_cmd:
+        for block in COLLECT_BLOCKS:
+            if block in stripped:
+                return "mc_collect", {
+                    "block": block,
+                    "count": parse_count(stripped),
+                }
+    # “他给了我木头”不是指令；必须以“给我/送我/扔给”开头。
+    give_cmd = re.match(
+        r"^(能|可以|麻烦)?\s*(给我|送我|扔给)", stripped
+    )
+    if give_cmd:
+        for item in GIVE_ITEMS:
+            if item in stripped:
+                return "mc_give", {
+                    "item": item,
+                    "count": parse_count(stripped, 1),
+                    "player": player,
+                }
     return None
 
 
@@ -190,33 +399,47 @@ class MinecraftChannel(BaseChannel):
                                 continue
                             if event.get("type") != "event":
                                 continue
-                            if event.get("event") != "chat":
-                                continue
+                            name = str(event.get("event") or "")
                             data = event.get("data") or {}
-                            username = str(
-                                data.get("username") or ""
-                            ).strip()
-                            message = str(
-                                data.get("message") or ""
-                            ).strip()
-                            if (
-                                not username
-                                or not message
-                                or username == self.bot_name
-                            ):
+                            if name == "chat":
+                                username = str(
+                                    data.get("username") or ""
+                                ).strip()
+                                message = str(
+                                    data.get("message") or ""
+                                ).strip()
+                                if (
+                                    not username
+                                    or not message
+                                    or username == self.bot_name
+                                ):
+                                    continue
+                                if (
+                                    self.allowed
+                                    and username not in self.allowed
+                                ):
+                                    continue
+                                self._last_speaker = username
+                                await queue.put(
+                                    ChannelMessage(
+                                        channel="mc",
+                                        user_id="local",
+                                        text=f"{username}: {message}",
+                                        display_name=username,
+                                    )
+                                )
                                 continue
-                            if (
-                                self.allowed
-                                and username not in self.allowed
-                            ):
+                            formatted = format_mc_event(name, data)
+                            if formatted is None:
                                 continue
-                            self._last_speaker = username
+                            kind, text = formatted
                             await queue.put(
                                 ChannelMessage(
                                     channel="mc",
                                     user_id="local",
-                                    text=f"{username}: {message}",
-                                    display_name=username,
+                                    text=text,
+                                    display_name=None,
+                                    kind=kind,
                                 )
                             )
                     finally:
@@ -305,12 +528,60 @@ class MinecraftChannel(BaseChannel):
                 return "洛还没进服。"
             position = data.get("position") or {}
             players = data.get("players") or []
+            inventory = data.get("inventory") or []
+            items = "、".join(
+                f"{item.get('name')}x{item.get('count')}"
+                for item in inventory[:6]
+            )
             return (
                 f"在 {position.get('x'):.1f}, {position.get('y'):.1f}, "
                 f"{position.get('z'):.1f}，血量 {data.get('health')}，"
                 f"饥饿 {data.get('food')}，附近玩家："
-                f"{'、'.join(players) if players else '没有'}"
+                f"{'、'.join(players) if players else '没有'}，"
+                f"背包：{items or '空'}"
             )
+        if skill == "inventory":
+            data = await self.call("inventory", {})
+            items = data.get("items") or []
+            if not items:
+                return "背包是空的。"
+            text = "、".join(
+                f"{item.get('name')}x{item.get('count')}"
+                for item in items[:12]
+            )
+            total = int(data.get("total") or len(items))
+            if total > len(items[:12]):
+                text += f" 等 {total} 种"
+            return f"背包：{text}"
+        if skill == "collect":
+            block = str(args.get("block") or "").strip()
+            if not block:
+                return "没说挖什么。"
+            count = int(args.get("count") or 4)
+            await self.call(
+                "collect",
+                {"block": block, "count": max(1, min(16, count))},
+            )
+            return f"去挖{block}了。"
+        if skill == "give":
+            player = str(
+                args.get("player") or self._last_speaker
+            ).strip()
+            item = str(args.get("item") or "").strip()
+            if not player:
+                return "不知道给谁。"
+            if not item:
+                return "没说给什么。"
+            count = int(args.get("count") or 1)
+            await self.call(
+                "give",
+                {
+                    "player": player,
+                    "item": item,
+                    "count": max(1, count),
+                },
+            )
+            return f"去给 {player} 送{item}了。"
         return f"未知游戏技能：{name}"
 
     async def send(self, to: str, text: str) -> None:

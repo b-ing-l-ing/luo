@@ -1,6 +1,6 @@
 # luo
 
-文本优先的 AI 伙伴，v0.7。
+文本优先的 AI 伙伴，v0.8。
 
 ## 快速开始
 
@@ -31,6 +31,11 @@ uv run luo
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/v1` | OpenAI 兼容端点 |
 | `DEEPSEEK_MODEL` | `deepseek-flash` | 模型 ID |
 | `HISTORY_LIMIT` | `20` | 启动时载入的消息条数 |
+| `HISTORY_CHAR_LIMIT` | `4000` | 历史再按字符数裁一次 |
+| `MEMORY_BLOCK_CHARS` | `1200` | 注入的记忆块总字数上限 |
+| `MEMORY_LINE_CHARS` | `120` | 单条记忆注入时的字数上限 |
+| `TOOL_RESULT_CHARS` | `1500` | 工具结果回灌给模型前的截断长度 |
+| `CONTEXT_DEBUG` | `false` | 在日志里打印每轮上下文大小 |
 | `STARTUP_GREETING` | `true` | 有摘要/未完成的事时，启动先开口 |
 | `STYLE_DEBUG` | `false` | 在终端标出命中的 AI 味说法 |
 | `QQ_WS_URL` | `ws://127.0.0.1:3001` | NapCat OneBot 11 WebSocket 地址 |
@@ -45,6 +50,9 @@ uv run luo
 | `WEB_SEARCH_MAX_RESULTS` | `5` | 每次搜索返回条数 |
 | `AUTO_SAVE_WEB_MEMES` | `true` | 联网搜到的梗图发送后自动存库 |
 | `WEB_MEME_MAX_PER_HOUR` | `3` | 每小时最多搜几张网图 |
+| `MC_WS_URL` | `ws://127.0.0.1:3002` | Mineflayer 边车的 WebSocket 地址 |
+| `MC_BOT_NAME` | `LuoBot` | 游戏里洛的 ID |
+| `MC_ALLOWED_PLAYERS` | — | 允许对话的玩家名，逗号分隔；留空允许所有 |
 | `SESSION_ALIASES` | — | 跨通道身份映射，例 `qq:123456=local` |
 | `PROACTIVE_ENABLED` | `true` | QQ 空闲且有待办时，是否主动发一句 |
 | `PROACTIVE_IDLE_MINUTES` | `120` | 空闲多久后考虑主动消息 |
@@ -78,14 +86,19 @@ uv run luo-qq
 - `bot/`：Mineflayer 边车，在 `127.0.0.1:3002` 开 WebSocket 给 Python 调
 - 一键启动：双击 `start-mc.bat`（起服务端 → 等 25565 → 起 Mineflayer 边车 → 起 `luo-mc`）
 - 客户端：Minecraft **1.21.8**（你 PCL 里已有原版），服务器地址 `127.0.0.1:25565`
-- 游戏内直接和洛说话：跟简单指令会在本地秒回，不走大模型
-  - `洛，跟着我` / `跟我` / `过来` → 跟着说话的人
-  - `洛，停下` / `别动` / `别跟着` → 停止移动
-  - `洛，你在哪` / `什么状态` → 报坐标、血量、饥饿、附近玩家
-- 其他聊天走正常对话模型，模型可用 `mc_follow` / `mc_stop` / `mc_goto` / `mc_state` 操作游戏
-- 旧的 `!follow` / `!stop` / `!state` / `!goto x y z` / `!say 内容` 仍然可用，方便直接测身体
-- 游戏会话和终端 / QQ 主号共用 `local`（见 `SESSION_ALIASES`），记忆是通的
-- 配置（`.env`）：`MC_WS_URL`、`MC_BOT_NAME`（默认 `LuoBot`）、`MC_ALLOWED_PLAYERS`（留空允许所有）
+- 游戏内直接和洛说话：简单指令在本地秒回，不走大模型
+  - `洛，跟着我` / `跟我来` / `过来` → 跟着说话的人
+  - `洛，停下` / `别动` / `别挖了` → 停止移动，并打断正在进行的采集/送东西
+  - `洛，你在哪` / `什么状态` → 报坐标、血量、饥饿、背包、附近玩家
+  - `洛，背包里有什么` → 报背包
+  - `洛，挖点木头` / `挖八块石头` → 采集附近方块（后台执行，做完会播报）
+  - `洛，给我点木头` → 走过去把东西丢给说话的人（后台执行）
+- 采集/送东西是后台动作：指令立即回、动作不阻塞聊天；做完通过 `action_done` 事件播报，失败会说“没干成”。
+- 其他聊天走正常对话模型，模型可用 `mc_follow` / `mc_stop` / `mc_goto` / `mc_state` / `mc_inventory` / `mc_collect` / `mc_give` 操作游戏。
+- 死亡、玩家进出服、洛自己的动作结果会作为“系统事件”写进上下文；记忆整理时可以把它们记成共同经历。
+- 旧的 `!follow` / `!stop` / `!state` / `!goto x y z` / `!say 内容` 仍然可用，方便直接测身体。
+- 游戏会话和终端 / QQ 主号共用 `local`（见 `SESSION_ALIASES`），记忆是通的。
+- 采集范围 48 格，找最近的几块；石头/矿石需要镐子，木头可以直接用手砍。世界目前是 `peaceful`，不用担心怪。
 
 ## 命令
 

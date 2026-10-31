@@ -83,13 +83,20 @@ class Decision:
 
 @dataclass(frozen=True)
 class ChannelMessage:
-    """通道收到的消息。user_id 是通道内的用户标识，用于拆 session。"""
+    """通道收到的消息。user_id 是通道内的用户标识，用于拆 session。
+
+    kind：
+    - "chat"：用户说话，正常回复；
+    - "event"：世界事件（死亡、进出服），只记入上下文，不回复；
+    - "action"：洛自己的后台动作结果，记入上下文并播报一句。
+    """
 
     channel: str
     user_id: str
     text: str
     display_name: str | None = None
     images: tuple[str, ...] = ()
+    kind: str = "chat"
 
 
 @dataclass(frozen=True)

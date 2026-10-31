@@ -26,6 +26,7 @@ EXTRACT_PROMPT = """你是一个记忆整理器。阅读下面的对话，提取
 
 规则：
 - 只根据用户的消息提取事实；助手的话只用来理解上下文，不要把助手说过的内容当成事实来源。
+- 标着“系统”的行是游戏里真实发生的事件（死亡、进出服、洛做了什么），可以作为共同经历记录，但 importance 不要给太高。
 - 不要重复记录已知记忆，也不要换个说法重记。
 - content 要具体（人名、物品、数字、地点、时间），不要写“用户喜欢游戏”这种空话。
 - 最多 5 条；没有值得记的就输出 {"memories":[]}。
@@ -124,7 +125,12 @@ def format_transcript(
 ) -> str:
     lines = []
     for event in events:
-        role = "用户" if event["role"] == "user" else assistant_label
+        if event["role"] == "user":
+            role = "用户"
+        elif event["role"] == "system":
+            role = "系统"
+        else:
+            role = assistant_label
         lines.append(f"[evt:{event['id']}] {role}: {event['content']}")
     return "\n".join(lines)
 
@@ -219,7 +225,18 @@ def score_memory(
     return importance * 0.5 + recency * 0.3 + keyword * 2.5
 
 
-def render_memory_block(memories: list[dict[str, Any]]) -> str:
+def _clip_line(content: Any, line_chars: int) -> str:
+    text = str(content)
+    if line_chars > 0 and len(text) > line_chars:
+        return text[: line_chars - 1] + "…"
+    return text
+
+
+def render_memory_block(
+    memories: list[dict[str, Any]],
+    max_chars: int = 0,
+    line_chars: int = 0,
+) -> str:
     if not memories:
         return ""
     open_items = [item for item in memories if item.get("status") == "open"]
@@ -229,17 +246,23 @@ def render_memory_block(memories: list[dict[str, Any]]) -> str:
         lines.append("【还没做完的事】")
         for memory in open_items:
             date = str(memory.get("ts", ""))[:10]
-            lines.append(f"- {memory.get('content')}（{date}）")
+            content = _clip_line(memory.get("content", ""), line_chars)
+            lines.append(f"- {content}（{date}）")
     if closed_items:
         lines.append("【你记得的事】")
         for memory in closed_items:
             date = str(memory.get("ts", ""))[:10]
+            content = _clip_line(memory.get("content", ""), line_chars)
             lines.append(
                 f"- [{memory.get('kind')}|重要度{memory.get('importance')}|{date}] "
-                f"{memory.get('content')}"
+                f"{content}"
             )
     lines.append("只在自然相关时提起，不要为了展示记忆硬聊旧话题；没记录的事就说不记得。")
-    return "\n".join(lines)
+    text = "\n".join(lines)
+    if max_chars > 0 and len(text) > max_chars:
+        text = text[:max_chars].rsplit("\n", 1)[0]
+        text += "\n（其余记忆省略）"
+    return text
 
 
 class MemoryManager:
@@ -281,7 +304,11 @@ class MemoryManager:
         return picked
 
     def render_for(self, user_text: str) -> str:
-        return render_memory_block(self.retrieve(user_text))
+        return render_memory_block(
+            self.retrieve(user_text),
+            max_chars=self.settings.memory_block_chars,
+            line_chars=self.settings.memory_line_chars,
+        )
 
     def on_turn(self) -> None:
         self.last_resolved = []

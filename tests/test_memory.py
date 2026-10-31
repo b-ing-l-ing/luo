@@ -234,3 +234,21 @@ def test_memory_manager_renders_open_loops_without_keyword(tmp_path):
     assert "明天一起打末影龙" in block
     assert "【还没做完的事】" in block
     store.close()
+
+
+def test_render_memory_block_limits():
+    memories = [
+        {
+            "content": "很长的记忆" * 40,
+            "kind": "fact",
+            "importance": 5,
+            "status": "closed",
+            "ts": "2026-10-01T00:00:00+00:00",
+        }
+    ]
+
+    block = render_memory_block(memories, max_chars=80, line_chars=20)
+
+    assert "…" in block
+    assert "其余记忆省略" in block
+    assert len(block) <= 80 + len("\n（其余记忆省略）")

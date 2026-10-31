@@ -108,6 +108,7 @@ class Session:
             )
         self.session_start_event_id = store.last_event_id(self.key)
         self.history = store.recent_events(self.key, settings.history_limit)
+        self.trim_history()
         self.memory = MemoryManager(store, sync_llm, settings, self.key)
         self.open_loops = [
             str(item["content"]) for item in store.open_memories(self.key, 5)
@@ -129,6 +130,25 @@ class Session:
         self.open_loops = [
             str(item["content"]) for item in self.store.open_memories(self.key, 5)
         ]
+
+    def add_history(self, role: str, content: str) -> None:
+        self.history.append({"role": role, "content": content})
+        self.trim_history()
+
+    def trim_history(self) -> None:
+        """先按条数、再按字符预算裁历史；至少保留最近两条。"""
+        limit = self.settings.history_limit
+        if limit > 0 and len(self.history) > limit:
+            del self.history[:-limit]
+        budget = self.settings.history_char_limit
+        if budget <= 0:
+            return
+        total = sum(
+            len(str(item.get("content") or "")) for item in self.history
+        )
+        while total > budget and len(self.history) > 2:
+            removed = self.history.pop(0)
+            total -= len(str(removed.get("content") or ""))
 
 
 class CompanionRuntime:
@@ -168,7 +188,7 @@ class CompanionRuntime:
             proactive = asyncio.create_task(self._proactive_loop())
             if self.channel.name == "terminal":
                 session = self._get_session("terminal", "local")
-                await self.channel.send("local", "洛 v0.7  /help 查看命令")
+                await self.channel.send("local", "洛 v0.8  /help 查看命令")
                 if session.history:
                     await self.channel.send(
                         "local", f"已载入最近 {len(session.history)} 条消息"
@@ -211,7 +231,7 @@ class CompanionRuntime:
         await self.channel.start_message(session.user_id)
         await self.channel.send_delta(session.user_id, text)
         await self.channel.end_message(session.user_id)
-        session.history.append({"role": "assistant", "content": text})
+        session.add_history("assistant", text)
         await self._style_check(session.user_id, text)
 
     async def on_message(self, msg: ChannelMessage) -> None:
@@ -225,6 +245,19 @@ class CompanionRuntime:
                 *session.recent_images,
                 *msg.images,
             ][-3:]
+
+        if msg.channel == "mc" and msg.kind in {"event", "action"}:
+            stored = (
+                msg.text
+                if msg.kind == "event"
+                else f"（洛的动作）{msg.text}"
+            )
+            session.store.add_event(session.key, "system", stored)
+            session.add_history("system", stored)
+            if msg.kind == "action":
+                await self._safe_send(msg.user_id, msg.text)
+                session.add_history("assistant", msg.text)
+            return
 
         if msg.channel == "mc":
             intent = parse_mc_intent(
@@ -249,18 +282,17 @@ class CompanionRuntime:
                     )
                 elif skill == "mc_stop":
                     reply = "停了。"
+                elif skill in {"mc_collect", "mc_give"}:
+                    reply = (
+                        result
+                        if not result.startswith("游戏操作失败")
+                        else "没干成，可能没看到你或者附近没有。"
+                    )
                 else:
                     reply = result
                 session.store.add_event(session.key, "assistant", reply)
-                session.history.extend(
-                    [
-                        {"role": "user", "content": text},
-                        {"role": "assistant", "content": reply},
-                    ]
-                )
-                limit = self.settings.history_limit
-                if limit > 0 and len(session.history) > limit:
-                    del session.history[:-limit]
+                session.add_history("user", text)
+                session.add_history("assistant", reply)
                 await self.channel.send(msg.user_id, reply)
                 return
 
@@ -443,8 +475,26 @@ class CompanionRuntime:
         if callable(game_tools):
             tools.extend(game_tools())
 
+        if self.settings.context_debug:
+            history_chars = sum(
+                len(str(item.get("content") or ""))
+                for item in session.history
+            )
+            tools_chars = len(json.dumps(tools, ensure_ascii=False))
+            log.info(
+                "上下文：system=%d字 历史=%d条/%d字 工具=%d个/%d字",
+                len(session.persona) + len(memory_block),
+                len(session.history),
+                history_chars,
+                len(tools),
+                tools_chars,
+            )
+
         async def execute_tool(name: str, arguments: str) -> str:
-            return await self._execute_tool(name, arguments, to=msg.user_id)
+            result = await self._execute_tool(
+                name, arguments, to=msg.user_id
+            )
+            return self._clip_tool_result(result)
 
         parts: list[str] = []
         await self.channel.start_message(msg.user_id)
@@ -467,15 +517,8 @@ class CompanionRuntime:
         reply = "".join(parts).strip()
         if reply:
             session.store.add_event(session.key, "assistant", reply)
-            session.history.extend(
-                [
-                    {"role": "user", "content": text},
-                    {"role": "assistant", "content": reply},
-                ]
-            )
-            limit = self.settings.history_limit
-            if limit > 0 and len(session.history) > limit:
-                del session.history[:-limit]
+            session.add_history("user", text)
+            session.add_history("assistant", reply)
             session.last_activity = time.monotonic()
         await self._style_check(msg.user_id, reply)
 
@@ -488,6 +531,15 @@ class CompanionRuntime:
                 )
         except Exception as exc:  # noqa: BLE001
             await self._safe_send(msg.user_id, f"记忆抽取失败：{exc}")
+
+    def _clip_tool_result(self, text: str) -> str:
+        limit = self.settings.tool_result_chars
+        if limit <= 0 or len(text) <= limit:
+            return text
+        return (
+            text[:limit]
+            + f"\n…（结果太长，已截断；原本 {len(text)} 字）"
+        )
 
     def _save_last_image(self, session: Session, tag: str | None) -> str:
         if not session.recent_images:
@@ -800,6 +852,7 @@ class CompanionRuntime:
                 continue
             await self.channel.send(session.user_id, text)
             session.store.add_event(session.key, "assistant", text)
+            session.add_history("assistant", text)
             session.last_activity = now
             sent.append((session.user_id, text))
         return sent

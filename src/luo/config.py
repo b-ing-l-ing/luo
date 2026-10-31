@@ -37,10 +37,19 @@ class Settings(BaseSettings):
     db_path: Path = PROJECT_ROOT / "data" / "luo.db"
 
     history_limit: int = Field(default=20, ge=1)
+    # 历史再按字符预算裁一次：20 条长消息也可能很占上下文
+    history_char_limit: int = Field(default=4000, ge=0)
     memory_top_k: int = Field(default=8, ge=0, le=50)
+    # 记忆块的总字符预算和单条长度
+    memory_block_chars: int = Field(default=1200, ge=0)
+    memory_line_chars: int = Field(default=120, ge=0)
+    # 工具结果回灌给模型前的截断长度
+    tool_result_chars: int = Field(default=1500, ge=0)
     memory_extract_every: int = Field(default=6, ge=1)
     startup_greeting: bool = True
     style_debug: bool = False
+    # 打印每轮上下文大小，方便看瘦身效果
+    context_debug: bool = False
 
     # 跨通道身份映射：raw_key=canonical_key，逗号分隔。
     # 例：qq:3466766306=local 让 QQ 主号和终端共用 "local" 这一份记忆。
