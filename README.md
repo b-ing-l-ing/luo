@@ -74,10 +74,10 @@ uv run luo-qq
 
 ## Minecraft（本地离线服）
 
-- `mc-server/`：Paper 1.20.4，`online-mode=false`，只监听 `127.0.0.1:25565`，难度先设为 `peaceful`（方便测身体）
+- `mc-server/`：Paper 1.21.8，`online-mode=false`，只监听 `127.0.0.1:25565`，难度先设为 `peaceful`（方便测身体）；服务端用 PCL 自带的 Java 21
 - `bot/`：Mineflayer 边车，目前用游戏内 `!` 命令控制
 - 一键启动：双击 `start-mc.bat`（起服务端 → 等 25565 → 起 bot）
-- 客户端：Minecraft **1.20.4**，服务器地址 `127.0.0.1:25565`
+- 客户端：Minecraft **1.21.8**（你 PCL 里已有原版），服务器地址 `127.0.0.1:25565`
 - 游戏内：`!follow` / `!stop` / `!state` / `!goto x y z` / `!say 内容`
 - 当前是身体测试，AI 还没接管；下一步接 WebSocket + `MinecraftAdapter`
 

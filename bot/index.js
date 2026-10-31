@@ -7,7 +7,7 @@ const { pathfinder, Movements, goals } = pathfinderPkg;
 const HOST = process.env.MC_HOST || "127.0.0.1";
 const PORT = Number(process.env.MC_PORT || 25565);
 const USERNAME = process.env.MC_USERNAME || "LuoBot";
-const VERSION = process.env.MC_VERSION || "1.20.4";
+const VERSION = process.env.MC_VERSION || "1.21.8";
 
 const bot = mineflayer.createBot({
   host: HOST,
