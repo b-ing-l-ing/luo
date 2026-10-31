@@ -15,6 +15,29 @@ def main() -> None:
         raise SystemExit(1) from None
 
 
+def main_mc() -> None:
+    import logging
+
+    from .config import Settings
+    from .game.minecraft import MinecraftChannel
+    from .runtime import CompanionRuntime
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    settings = Settings()
+    try:
+        asyncio.run(
+            CompanionRuntime(settings, MinecraftChannel(settings)).run()
+        )
+    except KeyboardInterrupt:
+        pass
+    except (RuntimeError, FileNotFoundError) as exc:
+        print(f"启动失败：{exc}")
+        raise SystemExit(1) from None
+
+
 def main_qq() -> None:
     import logging
 

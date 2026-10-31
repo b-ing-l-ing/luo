@@ -75,11 +75,17 @@ uv run luo-qq
 ## Minecraft（本地离线服）
 
 - `mc-server/`：Paper 1.21.8，`online-mode=false`，只监听 `127.0.0.1:25565`，难度先设为 `peaceful`（方便测身体）；服务端用 PCL 自带的 Java 21
-- `bot/`：Mineflayer 边车，目前用游戏内 `!` 命令控制
-- 一键启动：双击 `start-mc.bat`（起服务端 → 等 25565 → 起 bot）
+- `bot/`：Mineflayer 边车，在 `127.0.0.1:3002` 开 WebSocket 给 Python 调
+- 一键启动：双击 `start-mc.bat`（起服务端 → 等 25565 → 起 Mineflayer 边车 → 起 `luo-mc`）
 - 客户端：Minecraft **1.21.8**（你 PCL 里已有原版），服务器地址 `127.0.0.1:25565`
-- 游戏内：`!follow` / `!stop` / `!state` / `!goto x y z` / `!say 内容`
-- 当前是身体测试，AI 还没接管；下一步接 WebSocket + `MinecraftAdapter`
+- 游戏内直接和洛说话：跟简单指令会在本地秒回，不走大模型
+  - `洛，跟着我` / `跟我` / `过来` → 跟着说话的人
+  - `洛，停下` / `别动` / `别跟着` → 停止移动
+  - `洛，你在哪` / `什么状态` → 报坐标、血量、饥饿、附近玩家
+- 其他聊天走正常对话模型，模型可用 `mc_follow` / `mc_stop` / `mc_goto` / `mc_state` 操作游戏
+- 旧的 `!follow` / `!stop` / `!state` / `!goto x y z` / `!say 内容` 仍然可用，方便直接测身体
+- 游戏会话和终端 / QQ 主号共用 `local`（见 `SESSION_ALIASES`），记忆是通的
+- 配置（`.env`）：`MC_WS_URL`、`MC_BOT_NAME`（默认 `LuoBot`）、`MC_ALLOWED_PLAYERS`（留空允许所有）
 
 ## 命令
 

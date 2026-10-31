@@ -17,6 +17,7 @@ dependencies = [
 [project.scripts]
 luo = "luo:main"
 luo-qq = "luo:main_qq"
+luo-mc = "luo:main_mc"
 
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"

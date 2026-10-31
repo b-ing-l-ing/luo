@@ -10,6 +10,7 @@ from .chat import build_messages, load_persona
 from .channels.base import StopCompanion
 from .config import Settings
 from .core.interfaces import ChannelMessage, ChatChannel
+from .game.minecraft import parse_mc_intent
 from .greeting import greet
 from .images import (
     fetch_image_data_url,
@@ -50,8 +51,12 @@ def parse_aliases(raw: str) -> dict[str, str]:
 def map_session_key(
     channel: str, user_id: str, aliases: dict[str, str]
 ) -> str:
-    # 终端沿用旧的 "local"，避免已有记忆/历史在升级后“消失”。
-    raw = user_id if channel == "terminal" else f"{channel}:{user_id}"
+    # 终端沿用旧的 "local"；Minecraft 也归到同一个用户会话。
+    raw = (
+        user_id
+        if channel in {"terminal", "mc"}
+        else f"{channel}:{user_id}"
+    )
     return aliases.get(raw, raw)
 
 
@@ -221,6 +226,44 @@ class CompanionRuntime:
                 *msg.images,
             ][-3:]
 
+        if msg.channel == "mc":
+            intent = parse_mc_intent(
+                text, msg.display_name or "local"
+            )
+            if intent is not None:
+                skill, args = intent
+                session.store.add_event(session.key, "user", text)
+                try:
+                    result = await self._execute_tool(
+                        skill,
+                        json.dumps(args, ensure_ascii=False),
+                        to=msg.user_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    result = f"游戏操作失败：{exc}"
+                if skill == "mc_follow":
+                    reply = (
+                        "行，跟着你。"
+                        if not result.startswith("游戏操作失败")
+                        else "没跟成，可能没看到你。"
+                    )
+                elif skill == "mc_stop":
+                    reply = "停了。"
+                else:
+                    reply = result
+                session.store.add_event(session.key, "assistant", reply)
+                session.history.extend(
+                    [
+                        {"role": "user", "content": text},
+                        {"role": "assistant", "content": reply},
+                    ]
+                )
+                limit = self.settings.history_limit
+                if limit > 0 and len(session.history) > limit:
+                    del session.history[:-limit]
+                await self.channel.send(msg.user_id, reply)
+                return
+
         if text in {"/quit", "/exit"}:
             raise StopCompanion
         if text == "/reset":
@@ -384,16 +427,21 @@ class CompanionRuntime:
             session.persona, memory_block, session.history, text, msg.images
         )
 
+        supports_images = getattr(self.channel, "supports_images", True)
         tools: list[dict[str, Any]] = []
         if self.search is not None:
             tools.append(WEB_SEARCH_TOOL)
-            tools.append(SEND_WEB_MEME_TOOL)
-        if self.memes.tags():
+            if supports_images:
+                tools.append(SEND_WEB_MEME_TOOL)
+        if self.memes.tags() and supports_images:
             tools.append(SEND_MEME_TOOL)
         if hasattr(self.channel, "fetch_custom_faces"):
             tools.append(LIST_STICKERS_TOOL)
             tools.append(SEND_STICKER_TOOL)
             tools.append(ANNOTATE_STICKERS_TOOL)
+        game_tools = getattr(self.channel, "game_tools", None)
+        if callable(game_tools):
+            tools.extend(game_tools())
 
         async def execute_tool(name: str, arguments: str) -> str:
             return await self._execute_tool(name, arguments, to=msg.user_id)
@@ -458,6 +506,15 @@ class CompanionRuntime:
             args = json.loads(arguments or "{}")
         except json.JSONDecodeError:
             return "工具参数不是合法 JSON。"
+
+        if name.startswith("mc_"):
+            execute = getattr(self.channel, "execute_skill", None)
+            if execute is None:
+                return "当前通道不支持游戏操作。"
+            try:
+                return str(await execute(name, args))
+            except Exception as exc:  # noqa: BLE001
+                return f"游戏操作失败：{exc}"
 
         if name == "list_stickers":
             fetch = getattr(self.channel, "fetch_custom_faces", None)

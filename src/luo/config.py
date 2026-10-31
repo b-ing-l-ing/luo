@@ -64,3 +64,8 @@ class Settings(BaseSettings):
     memes_dir: Path = PROJECT_ROOT / "memes"
     # QQ 收藏表情同步后的本地库
     stickers_path: Path = PROJECT_ROOT / "state" / "stickers.json"
+
+    # Minecraft 边车（Node WebSocket API）
+    mc_ws_url: str = "ws://127.0.0.1:3002"
+    mc_bot_name: str = "LuoBot"
+    mc_allowed_players: str = ""
